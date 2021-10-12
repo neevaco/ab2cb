@@ -51,7 +51,7 @@ regex_cleaners = [
     (re.compile(r'([.*+?^${}()|[\]\\])'), r"\\\1"),  # escape special symbols
     (re.compile(r'\\\*'), r".*"),  # replace wildcards by .*
     # process separator placeholders (all ANSI characters but alphanumeric characters and _%.-)
-    (re.compile(r'\\\^'), r"(?:[\\x00-\\x24\\x26-\\x2C\\x2F\\x3A-\\x40\\x5B-\\x5E\\x60\\x7B-\\x7F]|$)"),
+    (re.compile(r'\\\^'), r"[^0-9a-zA-Z_\-\.%]"),
     #(re.compile(r'\\\|\\\|'), r"^[\\w\\-]+:\\/+(?!\\/)(?:[^\\/]+\\.)?"), # process extended anchor at expression start
     (re.compile(r'^\\\|'), r"^"),  # process anchor at expression start
     (re.compile(r'\\\|$'), r"$"),  # process anchor at expression end
@@ -146,16 +146,20 @@ def regex_filter(origText, regexpSource, contentType, matchCase, domains, thirdP
         if not anchor:
             regex = '^https?://.*' + regex
         else:
-            regex = '^https?://' + regex
+            regex = '^https?://([^/]+\\.)?' + regex
+
+    if (regex.find("https?://.*^http") != -1):
+        regex = regex.replace("https?://.*^http", "http")
 
     filter = {
         'trigger': {
             'url-filter': regex
         },
         'action': {
-            'type': 'block'
+            'type': 'block-cookies'
         }
     }
+
     if thirdParty:
         filter['trigger']['load-type'] = ['third-party']
     if domains:
@@ -300,6 +304,7 @@ def filter_from_text(text):
 
 def ab2cb_fp(options, fp):
     rules = []
+    unsupportedRegex = re.compile(r'{[0-9].*}')
     for l in fp.readlines():
         l = l.strip()
         if not l:
@@ -307,6 +312,10 @@ def ab2cb_fp(options, fp):
         if l[0] == '[':
             continue
         if l[0] == '!':
+            continue
+
+        if unsupportedRegex.search(l):
+            print("unsupported regex:"+l)
             continue
 
         rule = filter_from_text(l)
